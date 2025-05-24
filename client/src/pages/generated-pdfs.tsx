@@ -38,19 +38,50 @@ export default function GeneratedPdfs() {
   });
 
   const handleDownload = (pdf: GeneratedPdf) => {
-    toast({
-      title: "Download started",
-      description: `Downloading ${pdf.name}...`,
-    });
-    // In a real implementation, this would trigger actual PDF download
+    if (pdf.pdfUrl) {
+      const filename = pdf.pdfUrl.split('/').pop();
+      const downloadUrl = `/api/pdfs/${filename}/download`;
+      
+      // Create a temporary link and trigger download
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `${pdf.name}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({
+        title: "Download started",
+        description: `Downloading ${pdf.name}...`,
+      });
+    } else {
+      toast({
+        title: "Download failed",
+        description: "PDF file not available",
+        variant: "destructive",
+      });
+    }
   };
 
   const handlePreview = (pdf: GeneratedPdf) => {
-    toast({
-      title: "Opening preview",
-      description: `Opening preview for ${pdf.name}...`,
-    });
-    // In a real implementation, this would open PDF in a modal or new tab
+    if (pdf.pdfUrl) {
+      const filename = pdf.pdfUrl.split('/').pop();
+      const previewUrl = `/api/pdfs/${filename}`;
+      
+      // Open PDF in new tab for preview
+      window.open(previewUrl, '_blank');
+      
+      toast({
+        title: "Opening preview",
+        description: `Opening preview for ${pdf.name}...`,
+      });
+    } else {
+      toast({
+        title: "Preview failed",
+        description: "PDF file not available",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleSave = (pdf: GeneratedPdf) => {

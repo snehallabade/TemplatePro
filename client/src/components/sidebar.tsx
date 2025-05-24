@@ -1,6 +1,8 @@
 import { Link, useLocation } from "wouter";
-import { FileText, Home, FileIcon, HelpCircle, FileOutput } from "lucide-react";
+import { FileText, Home, FileIcon, HelpCircle, FileOutput, LogOut, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: Home },
@@ -11,6 +13,11 @@ const navigation = [
 
 export default function Sidebar() {
   const [location] = useLocation();
+  const { user } = useAuth();
+
+  const handleLogout = () => {
+    window.location.href = '/api/logout';
+  };
 
   return (
     <aside className="w-72 sidebar-gradient text-white flex-shrink-0">
@@ -31,9 +38,9 @@ export default function Sidebar() {
             
             return (
               <Link key={item.name} href={item.href}>
-                <a
+                <div
                   className={cn(
-                    "flex items-center space-x-3 p-3 rounded-lg font-medium transition-colors",
+                    "flex items-center space-x-3 p-3 rounded-lg font-medium transition-colors cursor-pointer",
                     isActive
                       ? "nav-active"
                       : "nav-inactive hover:bg-white hover:bg-opacity-10"
@@ -41,11 +48,52 @@ export default function Sidebar() {
                 >
                   <Icon className="h-5 w-5" />
                   <span>{item.name}</span>
-                </a>
+                </div>
               </Link>
             );
           })}
         </nav>
+
+        {/* User Profile Section */}
+        {user && (
+          <div className="mt-auto pt-6 border-t border-white/20">
+            <div className="flex items-center space-x-3 mb-4">
+              {user.profileImageUrl ? (
+                <img
+                  src={user.profileImageUrl}
+                  alt="Profile"
+                  className="w-10 h-10 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                  <User className="h-5 w-5" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white truncate">
+                  {user.firstName || user.lastName 
+                    ? `${user.firstName || ''} ${user.lastName || ''}`.trim()
+                    : user.email || 'User'
+                  }
+                </p>
+                {user.email && (
+                  <p className="text-xs text-white/70 truncate">
+                    {user.email}
+                  </p>
+                )}
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleLogout}
+              className="w-full bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white"
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              Sign Out
+            </Button>
+          </div>
+        )}
       </div>
     </aside>
   );
