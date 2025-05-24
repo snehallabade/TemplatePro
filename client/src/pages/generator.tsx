@@ -182,14 +182,14 @@ export default function Generator() {
               }}
               className="flex-1"
             />
-          ) : placeholder.type === "date" ? (
+          ) : currentType === "date" ? (
             <Input
               type="date"
               value={value}
               onChange={(e) => handleInputChange(placeholder.name, e.target.value)}
               className="flex-1"
             />
-          ) : placeholder.type === "number" ? (
+          ) : currentType === "number" ? (
             <Input
               type="number"
               value={value}
