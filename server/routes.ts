@@ -4,7 +4,11 @@ import { storage } from "./storage";
 import { z } from "zod";
 import multer from "multer";
 import mammoth from "mammoth";
+import path from "path";
+import fs from "fs-extra";
 import { insertTemplateSchema, insertGeneratedPdfSchema, pdfFormDataSchema } from "@shared/schema";
+import { setupAuth, isAuthenticated } from "./replitAuth";
+import { PdfGenerator } from "./pdf-generator";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -72,11 +76,62 @@ function replacePlaceholders(text: string, formData: Record<string, any>) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Auth middleware
+  await setupAuth(app);
+
+  // Helper function to get user ID from request
+  const getUserId = (req: any): string | undefined => {
+    return req.user?.claims?.sub;
+  };
+
+  // Auth routes
+  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      const user = await storage.getUser(userId);
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Serve PDF files
+  app.get("/api/pdfs/:filename", (req, res) => {
+    const filename = req.params.filename;
+    const filePath = path.join(process.cwd(), 'generated-pdfs', filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: "PDF not found" });
+    }
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.sendFile(filePath);
+  });
+
+  // Download PDF files
+  app.get("/api/pdfs/:filename/download", (req, res) => {
+    const filename = req.params.filename;
+    const filePath = path.join(process.cwd(), 'generated-pdfs', filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: "PDF not found" });
+    }
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.download(filePath);
+  });
   
   // Dashboard stats
-  app.get("/api/dashboard/stats", async (req, res) => {
+  app.get("/api/dashboard/stats", isAuthenticated, async (req: any, res) => {
     try {
-      const stats = await storage.getDashboardStats();
+      const userId = getUserId(req);
+      const stats = await storage.getDashboardStats(userId);
       res.json(stats);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch dashboard stats" });
@@ -84,15 +139,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Template routes
-  app.get("/api/templates", async (req, res) => {
+  app.get("/api/templates", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = getUserId(req);
       const { search } = req.query;
       let templates;
       
       if (search && typeof search === 'string') {
-        templates = await storage.searchTemplates(search);
+        templates = await storage.searchTemplates(search, userId);
       } else {
-        templates = await storage.getAllTemplates();
+        templates = await storage.getAllTemplates(userId);
       }
       
       res.json(templates);
@@ -101,10 +157,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/templates/:id", async (req, res) => {
+  app.get("/api/templates/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = getUserId(req);
       const id = parseInt(req.params.id);
-      const template = await storage.getTemplate(id);
+      const template = await storage.getTemplate(id, userId);
       
       if (!template) {
         return res.status(404).json({ message: "Template not found" });
@@ -116,8 +173,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/templates/upload", upload.single('document'), async (req, res) => {
+  app.post("/api/templates/upload", isAuthenticated, upload.single('document'), async (req: any, res) => {
     try {
+      const userId = getUserId(req);
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
       }
@@ -141,7 +199,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const validatedData = insertTemplateSchema.parse(templateData);
-      const template = await storage.createTemplate(validatedData);
+      const template = await storage.createTemplate(validatedData, userId);
       
       res.json({
         template,
@@ -156,10 +214,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/templates/:id", async (req, res) => {
+  app.delete("/api/templates/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = getUserId(req);
       const id = parseInt(req.params.id);
-      const success = await storage.deleteTemplate(id);
+      const success = await storage.deleteTemplate(id, userId);
       
       if (!success) {
         return res.status(404).json({ message: "Template not found" });
@@ -172,19 +231,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Generated PDF routes
-  app.get("/api/generated-pdfs", async (req, res) => {
+  app.get("/api/generated-pdfs", isAuthenticated, async (req: any, res) => {
     try {
-      const pdfs = await storage.getAllGeneratedPdfs();
+      const userId = getUserId(req);
+      const pdfs = await storage.getAllGeneratedPdfs(userId);
       res.json(pdfs);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch generated PDFs" });
     }
   });
 
-  app.get("/api/generated-pdfs/:id", async (req, res) => {
+  app.get("/api/generated-pdfs/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = getUserId(req);
       const id = parseInt(req.params.id);
-      const pdf = await storage.getGeneratedPdf(id);
+      const pdf = await storage.getGeneratedPdf(id, userId);
       
       if (!pdf) {
         return res.status(404).json({ message: "Generated PDF not found" });
@@ -196,32 +257,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/generate-pdf", async (req, res) => {
+  app.post("/api/generate-pdf", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = getUserId(req);
       const { templateId, formData, name } = req.body;
       
       // Validate input
       const validatedFormData = pdfFormDataSchema.parse(formData);
       
       // Get template
-      const template = await storage.getTemplate(templateId);
+      const template = await storage.getTemplate(templateId, userId);
       if (!template) {
         return res.status(404).json({ message: "Template not found" });
       }
       
-      // Replace placeholders in content
-      const processedContent = replacePlaceholders(template.originalContent, validatedFormData);
+      // Generate actual PDF file
+      const { filePath } = await PdfGenerator.generatePdf({
+        template,
+        formData: validatedFormData
+      });
+      
+      // Get filename from path
+      const filename = path.basename(filePath);
+      const pdfUrl = PdfGenerator.getPdfUrl(filename);
       
       // Create generated PDF record
       const pdfData = {
         templateId,
         name: name || `${template.name} - ${new Date().toLocaleDateString()}`,
         formData: validatedFormData,
-        pdfContent: processedContent,
+        pdfContent: replacePlaceholders(template.originalContent, validatedFormData),
+        pdfUrl,
       };
       
       const validatedPdfData = insertGeneratedPdfSchema.parse(pdfData);
-      const generatedPdf = await storage.createGeneratedPdf(validatedPdfData);
+      const generatedPdf = await storage.createGeneratedPdf(validatedPdfData, userId);
       
       res.json(generatedPdf);
     } catch (error) {
@@ -233,10 +303,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/generated-pdfs/:id", async (req, res) => {
+  app.delete("/api/generated-pdfs/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = getUserId(req);
       const id = parseInt(req.params.id);
-      const success = await storage.deleteGeneratedPdf(id);
+      
+      // Get PDF info before deletion
+      const pdf = await storage.getGeneratedPdf(id, userId);
+      if (pdf && pdf.pdfUrl) {
+        const filename = path.basename(pdf.pdfUrl);
+        const filePath = path.join(process.cwd(), 'generated-pdfs', filename);
+        await PdfGenerator.deletePdf(filePath);
+      }
+      
+      const success = await storage.deleteGeneratedPdf(id, userId);
       
       if (!success) {
         return res.status(404).json({ message: "Generated PDF not found" });
