@@ -85,20 +85,10 @@ export default function UploadModal({ open, onOpenChange, onSuccess }: UploadMod
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl" aria-describedby="upload-description">
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
-            Upload New Template
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={handleClose}
-              className="h-6 w-6 p-0"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </DialogTitle>
+          <DialogTitle>Upload New Template</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div id="upload-description" className="space-y-6">
           {/* File Upload Zone */}
           {!uploadResult && (
             <div
