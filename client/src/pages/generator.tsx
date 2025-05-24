@@ -18,6 +18,7 @@ export default function Generator() {
   const templateId = params.templateId ? parseInt(params.templateId) : null;
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [previewContent, setPreviewContent] = useState<string>("");
+  const [placeholderTypes, setPlaceholderTypes] = useState<Record<string, string>>({});
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -72,6 +73,13 @@ export default function Generator() {
     }));
   };
 
+  const handleTypeChange = (placeholderName: string, newType: string) => {
+    setPlaceholderTypes(prev => ({
+      ...prev,
+      [placeholderName]: newType
+    }));
+  };
+
   const handleGeneratePreview = () => {
     if (templateId) {
       previewMutation.mutate({ templateId, formData });
@@ -85,12 +93,39 @@ export default function Generator() {
     }
   };
 
-  const handleDownload = () => {
-    toast({
-      title: "Download started",
-      description: "PDF download will begin shortly.",
-    });
-    // In a real implementation, this would trigger actual PDF download
+  const handleDownload = async () => {
+    if (templateId && template) {
+      try {
+        const response = await apiRequest('POST', '/api/generate-pdf-download', { 
+          templateId, 
+          formData,
+          downloadOnly: true 
+        });
+        
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `${template.name.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+          
+          toast({
+            title: "Download completed",
+            description: "PDF has been downloaded to your device.",
+          });
+        }
+      } catch (error) {
+        toast({
+          title: "Download failed", 
+          description: "Unable to download PDF",
+          variant: "destructive",
+        });
+      }
+    }
   };
 
   const handlePrint = () => {
@@ -110,6 +145,7 @@ export default function Generator() {
 
   const renderFormField = (placeholder: Placeholder) => {
     const value = formData[placeholder.name] || "";
+    const currentType = placeholderTypes[placeholder.name] || placeholder.type;
 
     return (
       <div key={placeholder.name} className="space-y-2">
@@ -118,7 +154,7 @@ export default function Generator() {
             {placeholder.label}
           </Label>
           
-          <Select value={placeholder.type} disabled>
+          <Select value={currentType} onValueChange={(newType) => handleTypeChange(placeholder.name, newType)}>
             <SelectTrigger className="w-24 bg-gray-800 text-white text-xs border-0">
               <SelectValue />
             </SelectTrigger>
@@ -130,7 +166,7 @@ export default function Generator() {
             </SelectContent>
           </Select>
 
-          {placeholder.type === "image" ? (
+          {currentType === "image" ? (
             <Input
               type="file"
               accept="image/*"

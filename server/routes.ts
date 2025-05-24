@@ -303,6 +303,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Direct PDF download endpoint
+  app.post("/api/generate-pdf-download", async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      const { templateId, formData } = req.body;
+      
+      // Validate input
+      const validatedFormData = pdfFormDataSchema.parse(formData);
+      
+      // Get template
+      const template = await storage.getTemplate(templateId, userId);
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      
+      // Generate PDF
+      const { buffer } = await PdfGenerator.generatePdf({
+        template,
+        formData: validatedFormData
+      });
+      
+      // Send PDF directly as download
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${template.name.replace(/\s+/g, '_')}.pdf"`);
+      res.send(buffer);
+    } catch (error) {
+      console.error("PDF download error:", error);
+      res.status(500).json({ message: "Failed to generate PDF for download" });
+    }
+  });
+
   app.delete("/api/generated-pdfs/:id", async (req: any, res) => {
     try {
       const userId = getUserId(req);
