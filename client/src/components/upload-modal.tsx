@@ -83,7 +83,7 @@ export default function UploadModal({ open, onOpenChange, onSuccess }: UploadMod
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl" aria-describedby="upload-description">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             Upload New Template
