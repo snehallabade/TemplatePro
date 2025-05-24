@@ -14,31 +14,28 @@ import Landing from "@/pages/landing";
 import NotFound from "@/pages/not-found";
 
 function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
+  // Temporarily bypass authentication for demo purposes
+  const mockUser = {
+    id: 'demo-user',
+    email: 'demo@example.com',
+    firstName: 'Demo',
+    lastName: 'User'
+  };
 
   return (
-    <Switch>
-      {isLoading || !isAuthenticated ? (
-        <Route path="/" component={Landing} />
-      ) : (
-        <>
-          <div className="flex min-h-screen">
-            <Sidebar />
-            <main className="flex-1 overflow-hidden">
-              <Switch>
-                <Route path="/" component={Dashboard} />
-                <Route path="/templates" component={Templates} />
-                <Route path="/generator/:templateId?" component={Generator} />
-                <Route path="/generated-pdfs" component={GeneratedPdfs} />
-                <Route path="/user-guide" component={UserGuide} />
-                <Route component={NotFound} />
-              </Switch>
-            </main>
-          </div>
-        </>
-      )}
-      <Route component={NotFound} />
-    </Switch>
+    <div className="flex min-h-screen">
+      <Sidebar />
+      <main className="flex-1 overflow-hidden">
+        <Switch>
+          <Route path="/" component={Dashboard} />
+          <Route path="/templates" component={Templates} />
+          <Route path="/generator/:templateId?" component={Generator} />
+          <Route path="/generated-pdfs" component={GeneratedPdfs} />
+          <Route path="/user-guide" component={UserGuide} />
+          <Route component={NotFound} />
+        </Switch>
+      </main>
+    </div>
   );
 }
 

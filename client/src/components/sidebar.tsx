@@ -13,10 +13,19 @@ const navigation = [
 
 export default function Sidebar() {
   const [location] = useLocation();
-  const { user } = useAuth();
+  
+  // Demo user for testing
+  const user = {
+    id: 'demo-user',
+    email: 'demo@example.com',
+    firstName: 'Demo',
+    lastName: 'User',
+    profileImageUrl: null
+  };
 
   const handleLogout = () => {
-    window.location.href = '/api/logout';
+    // For demo mode, just reload the page
+    window.location.reload();
   };
 
   return (
