@@ -1,69 +1,105 @@
 import { 
   templates, 
   generatedPdfs, 
+  users,
   type Template, 
   type InsertTemplate, 
   type GeneratedPdf, 
   type InsertGeneratedPdf,
   type DashboardStats,
-  type Placeholder
+  type Placeholder,
+  type User,
+  type UpsertUser
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, and } from "drizzle-orm";
 
 export interface IStorage {
+  // User operations (required for authentication)
+  getUser(id: string): Promise<User | undefined>;
+  upsertUser(user: UpsertUser): Promise<User>;
+  
   // Template operations
-  createTemplate(template: InsertTemplate): Promise<Template>;
-  getTemplate(id: number): Promise<Template | undefined>;
-  getAllTemplates(): Promise<Template[]>;
-  searchTemplates(query: string): Promise<Template[]>;
-  deleteTemplate(id: number): Promise<boolean>;
+  createTemplate(template: InsertTemplate, userId?: string): Promise<Template>;
+  getTemplate(id: number, userId?: string): Promise<Template | undefined>;
+  getAllTemplates(userId?: string): Promise<Template[]>;
+  searchTemplates(query: string, userId?: string): Promise<Template[]>;
+  deleteTemplate(id: number, userId?: string): Promise<boolean>;
   
   // Generated PDF operations
-  createGeneratedPdf(pdf: InsertGeneratedPdf): Promise<GeneratedPdf>;
-  getGeneratedPdf(id: number): Promise<GeneratedPdf | undefined>;
-  getAllGeneratedPdfs(): Promise<GeneratedPdf[]>;
-  getGeneratedPdfsByTemplate(templateId: number): Promise<GeneratedPdf[]>;
-  deleteGeneratedPdf(id: number): Promise<boolean>;
+  createGeneratedPdf(pdf: InsertGeneratedPdf, userId?: string): Promise<GeneratedPdf>;
+  getGeneratedPdf(id: number, userId?: string): Promise<GeneratedPdf | undefined>;
+  getAllGeneratedPdfs(userId?: string): Promise<GeneratedPdf[]>;
+  getGeneratedPdfsByTemplate(templateId: number, userId?: string): Promise<GeneratedPdf[]>;
+  deleteGeneratedPdf(id: number, userId?: string): Promise<boolean>;
   
   // Dashboard stats
-  getDashboardStats(): Promise<DashboardStats>;
+  getDashboardStats(userId?: string): Promise<DashboardStats>;
 }
 
-export class MemStorage implements IStorage {
-  private templates: Map<number, Template>;
-  private generatedPdfs: Map<number, GeneratedPdf>;
-  private currentTemplateId: number;
-  private currentPdfId: number;
-
-  constructor() {
-    this.templates = new Map();
-    this.generatedPdfs = new Map();
-    this.currentTemplateId = 1;
-    this.currentPdfId = 1;
+export class DatabaseStorage implements IStorage {
+  // User operations (required for authentication)
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
 
-  async createTemplate(insertTemplate: InsertTemplate): Promise<Template> {
-    const id = this.currentTemplateId++;
-    const template: Template = {
-      ...insertTemplate,
-      id,
-      uploadedAt: new Date(),
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return user;
+  }
+
+  // Template operations
+  async createTemplate(insertTemplate: InsertTemplate, userId?: string): Promise<Template> {
+    const templateData = {
+      name: insertTemplate.name,
+      filename: insertTemplate.filename,
+      originalContent: insertTemplate.originalContent,
+      placeholders: insertTemplate.placeholders,
+      sections: insertTemplate.sections || 1,
+      userId: userId || null
     };
-    this.templates.set(id, template);
+    
+    const [template] = await db
+      .insert(templates)
+      .values(templateData)
+      .returning();
     return template;
   }
 
-  async getTemplate(id: number): Promise<Template | undefined> {
-    return this.templates.get(id);
+  async getTemplate(id: number, userId?: string): Promise<Template | undefined> {
+    const conditions = userId 
+      ? and(eq(templates.id, id), eq(templates.userId, userId))
+      : eq(templates.id, id);
+    
+    const [template] = await db.select().from(templates).where(conditions);
+    return template;
   }
 
-  async getAllTemplates(): Promise<Template[]> {
-    return Array.from(this.templates.values()).sort((a, b) => 
-      b.uploadedAt.getTime() - a.uploadedAt.getTime()
-    );
+  async getAllTemplates(userId?: string): Promise<Template[]> {
+    const conditions = userId ? eq(templates.userId, userId) : undefined;
+    
+    const result = await db
+      .select()
+      .from(templates)
+      .where(conditions)
+      .orderBy(templates.uploadedAt);
+    
+    return result;
   }
 
-  async searchTemplates(query: string): Promise<Template[]> {
-    const allTemplates = await this.getAllTemplates();
+  async searchTemplates(query: string, userId?: string): Promise<Template[]> {
+    const allTemplates = await this.getAllTemplates(userId);
     const lowerQuery = query.toLowerCase();
     return allTemplates.filter(template => 
       template.name.toLowerCase().includes(lowerQuery) ||
@@ -71,43 +107,71 @@ export class MemStorage implements IStorage {
     );
   }
 
-  async deleteTemplate(id: number): Promise<boolean> {
-    return this.templates.delete(id);
+  async deleteTemplate(id: number, userId?: string): Promise<boolean> {
+    const conditions = userId 
+      ? and(eq(templates.id, id), eq(templates.userId, userId))
+      : eq(templates.id, id);
+    
+    const result = await db.delete(templates).where(conditions);
+    return result.rowCount > 0;
   }
 
-  async createGeneratedPdf(insertPdf: InsertGeneratedPdf): Promise<GeneratedPdf> {
-    const id = this.currentPdfId++;
-    const pdf: GeneratedPdf = {
-      ...insertPdf,
-      id,
-      createdAt: new Date(),
-    };
-    this.generatedPdfs.set(id, pdf);
+  // Generated PDF operations
+  async createGeneratedPdf(insertPdf: InsertGeneratedPdf, userId?: string): Promise<GeneratedPdf> {
+    const [pdf] = await db
+      .insert(generatedPdfs)
+      .values({ ...insertPdf, userId })
+      .returning();
     return pdf;
   }
 
-  async getGeneratedPdf(id: number): Promise<GeneratedPdf | undefined> {
-    return this.generatedPdfs.get(id);
+  async getGeneratedPdf(id: number, userId?: string): Promise<GeneratedPdf | undefined> {
+    const conditions = userId 
+      ? and(eq(generatedPdfs.id, id), eq(generatedPdfs.userId, userId))
+      : eq(generatedPdfs.id, id);
+    
+    const [pdf] = await db.select().from(generatedPdfs).where(conditions);
+    return pdf;
   }
 
-  async getAllGeneratedPdfs(): Promise<GeneratedPdf[]> {
-    return Array.from(this.generatedPdfs.values()).sort((a, b) => 
-      b.createdAt.getTime() - a.createdAt.getTime()
-    );
+  async getAllGeneratedPdfs(userId?: string): Promise<GeneratedPdf[]> {
+    const conditions = userId ? eq(generatedPdfs.userId, userId) : undefined;
+    
+    const result = await db
+      .select()
+      .from(generatedPdfs)
+      .where(conditions)
+      .orderBy(generatedPdfs.createdAt);
+    
+    return result;
   }
 
-  async getGeneratedPdfsByTemplate(templateId: number): Promise<GeneratedPdf[]> {
-    const allPdfs = await this.getAllGeneratedPdfs();
-    return allPdfs.filter(pdf => pdf.templateId === templateId);
+  async getGeneratedPdfsByTemplate(templateId: number, userId?: string): Promise<GeneratedPdf[]> {
+    const conditions = userId 
+      ? and(eq(generatedPdfs.templateId, templateId), eq(generatedPdfs.userId, userId))
+      : eq(generatedPdfs.templateId, templateId);
+    
+    const result = await db
+      .select()
+      .from(generatedPdfs)
+      .where(conditions)
+      .orderBy(generatedPdfs.createdAt);
+    
+    return result;
   }
 
-  async deleteGeneratedPdf(id: number): Promise<boolean> {
-    return this.generatedPdfs.delete(id);
+  async deleteGeneratedPdf(id: number, userId?: string): Promise<boolean> {
+    const conditions = userId 
+      ? and(eq(generatedPdfs.id, id), eq(generatedPdfs.userId, userId))
+      : eq(generatedPdfs.id, id);
+    
+    const result = await db.delete(generatedPdfs).where(conditions);
+    return result.rowCount > 0;
   }
 
-  async getDashboardStats(): Promise<DashboardStats> {
-    const allTemplates = await this.getAllTemplates();
-    const allPdfs = await this.getAllGeneratedPdfs();
+  async getDashboardStats(userId?: string): Promise<DashboardStats> {
+    const allTemplates = await this.getAllTemplates(userId);
+    const allPdfs = await this.getAllGeneratedPdfs(userId);
     
     // Find most used template
     const templateUsage = new Map<number, number>();
@@ -121,7 +185,7 @@ export class MemStorage implements IStorage {
     for (const [templateId, usage] of templateUsage.entries()) {
       if (usage > maxUsage) {
         maxUsage = usage;
-        const template = this.templates.get(templateId);
+        const template = allTemplates.find(t => t.id === templateId);
         if (template) {
           mostUsedTemplate = template.name;
         }
@@ -131,7 +195,7 @@ export class MemStorage implements IStorage {
     // Recent activity
     let recentActivity = "";
     if (allTemplates.length > 0) {
-      const latestTemplate = allTemplates[0];
+      const latestTemplate = allTemplates[allTemplates.length - 1];
       const timeDiff = Date.now() - latestTemplate.uploadedAt.getTime();
       const hours = Math.floor(timeDiff / (1000 * 60 * 60));
       recentActivity = hours < 1 ? "Less than an hour ago" : `${hours} hours ago`;
@@ -146,4 +210,4 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
