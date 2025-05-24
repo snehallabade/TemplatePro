@@ -32,12 +32,14 @@ export default function Sidebar() {
     <aside className="w-72 sidebar-gradient text-white flex-shrink-0">
       <div className="p-6">
         {/* Logo Section */}
-        <div className="flex items-center space-x-3 mb-8">
-          <div className="bg-white bg-opacity-20 p-2 rounded-lg">
-            <FileOutput className="h-6 w-6" />
+        <Link href="/">
+          <div className="flex items-center space-x-3 mb-8 cursor-pointer hover:bg-white/10 rounded-lg p-2 -m-2 transition-colors">
+            <div className="bg-white bg-opacity-20 p-2 rounded-lg">
+              <FileOutput className="h-6 w-6" />
+            </div>
+            <h1 className="text-xl font-bold">PDF Wizard</h1>
           </div>
-          <h1 className="text-xl font-bold">PDF Wizard</h1>
-        </div>
+        </Link>
 
         {/* Navigation Menu */}
         <nav className="space-y-2">

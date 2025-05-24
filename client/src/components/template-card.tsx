@@ -1,8 +1,11 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText } from "lucide-react";
+import { FileText, Trash2 } from "lucide-react";
 import { Template } from "@shared/schema";
 import { Link } from "wouter";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface TemplateCardProps {
   template: Template;
@@ -19,6 +22,38 @@ const colors = [
 
 export default function TemplateCard({ template }: TemplateCardProps) {
   const colorClass = colors[template.id % colors.length];
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const deleteMutation = useMutation({
+    mutationFn: async (templateId: number) => {
+      const response = await apiRequest('DELETE', `/api/templates/${templateId}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/templates'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      toast({
+        title: "Template deleted",
+        description: "Template has been removed successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Delete failed",
+        description: error.message || "Failed to delete template",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (window.confirm(`Are you sure you want to delete "${template.name}"?`)) {
+      deleteMutation.mutate(template.id);
+    }
+  };
 
   return (
     <Card className="template-card overflow-hidden">
@@ -48,15 +83,26 @@ export default function TemplateCard({ template }: TemplateCardProps) {
             <span className="ml-1">{template.sections} section{template.sections !== 1 ? 's' : ''}</span>
           </div>
           
-          <Link href={`/generator/${template.id}`}>
-            <Button 
-              className="w-full bg-primary/10 hover:bg-primary/20 text-primary border-0"
+          <div className="flex gap-2">
+            <Link href={`/generator/${template.id}`} className="flex-1">
+              <Button 
+                className="w-full bg-primary/10 hover:bg-primary/20 text-primary border-0"
+                variant="outline"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Use Template
+              </Button>
+            </Link>
+            <Button
+              onClick={handleDelete}
               variant="outline"
+              size="sm"
+              className="px-3 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+              disabled={deleteMutation.isPending}
             >
-              <FileText className="h-4 w-4 mr-2" />
-              Use Template
+              <Trash2 className="h-4 w-4" />
             </Button>
-          </Link>
+          </div>
         </div>
       </CardContent>
     </Card>

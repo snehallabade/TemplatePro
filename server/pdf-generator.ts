@@ -19,7 +19,7 @@ export class PdfGenerator {
   static async generatePdf(options: PdfGenerationOptions): Promise<{ filePath: string; buffer: Buffer }> {
     const { template, formData } = options;
     
-    // Create PDF document
+    // Create PDF document with proper metadata for Adobe compatibility
     const doc = new PDFDocument({
       size: 'A4',
       margins: {
@@ -27,7 +27,16 @@ export class PdfGenerator {
         bottom: 72,
         left: 72,
         right: 72
-      }
+      },
+      info: {
+        Title: template.name,
+        Author: 'PDF Wizard',
+        Subject: 'Generated PDF Document',
+        Creator: 'PDF Wizard',
+        Producer: 'PDF Wizard'
+      },
+      pdfVersion: '1.4',
+      compress: true
     });
 
     // Create output directory
@@ -110,21 +119,41 @@ export class PdfGenerator {
     // End the document
     doc.end();
 
-    // Wait for PDF generation to complete
+    // Wait for PDF generation to complete and ensure proper finalization
     return new Promise((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      
+      doc.on('data', (chunk) => {
+        chunks.push(chunk);
+      });
+      
       doc.on('end', () => {
-        const pdfBuffer = Buffer.concat(buffers);
-        
-        // Write to file
-        fs.writeFileSync(filePath, pdfBuffer);
-        
-        resolve({
-          filePath,
-          buffer: pdfBuffer
-        });
+        try {
+          const pdfBuffer = Buffer.concat(chunks);
+          
+          // Ensure the buffer is valid PDF format
+          if (pdfBuffer.length < 100 || !pdfBuffer.toString('utf8', 0, 4).includes('%PDF')) {
+            throw new Error('Invalid PDF format generated');
+          }
+          
+          // Write to file with proper error handling
+          fs.writeFileSync(filePath, pdfBuffer);
+          
+          resolve({
+            filePath,
+            buffer: pdfBuffer
+          });
+        } catch (error) {
+          reject(new Error(`PDF generation failed: ${error.message}`));
+        }
       });
 
       doc.on('error', reject);
+      
+      // Set a timeout to prevent hanging
+      setTimeout(() => {
+        reject(new Error('PDF generation timeout'));
+      }, 30000);
     });
   }
 
